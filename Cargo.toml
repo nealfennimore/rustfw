@@ -1,2 +1,2 @@
 [workspace]
-members = ["netfilter_queue", "firewall"]
+members = ["netfilter_queue", "rust-fw"]
