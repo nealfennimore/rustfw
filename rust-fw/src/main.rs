@@ -1,5 +1,5 @@
 use libc;
-use netfilter_queue::{nfq_create_queue, nfq_open, nfq_close, nfq_set_mode, nfq_unbind_pf, nfq_bind_pf, nfq_handle_packet, nfq_fd, nfq_set_verdict2, nfq_get_msg_packet_hdr, NfMsgPacketHdr};
+use netfilter_queue::{nfq_create_queue, nfq_open, nfq_close, nfq_set_mode, nfq_unbind_pf, nfq_bind_pf, nfq_handle_packet, nfq_fd, nfq_set_verdict2, nfq_get_msg_packet_hdr, NfMsgPacketHdr, ProtocolFamily};
 
 const NF_ACCEPT: u32 = 0x0001;
 const NFQNL_COPY_PACKER: u8 = 0x02;
@@ -18,9 +18,9 @@ fn main() {
     let qh = unsafe { nfq_open() };
     assert!(!qh.is_null());
 
-    unsafe { nfq_unbind_pf(qh, libc::AF_INET) };
+    unsafe { nfq_unbind_pf(qh, ProtocolFamily::IPv4) };
 
-    let rc = unsafe { nfq_bind_pf(qh, libc::AF_INET) };
+    let rc = unsafe { nfq_bind_pf(qh, ProtocolFamily::IPv4) };
     assert!(rc == 0, "{} = rc", rc);
 
     println!("RC {}", rc);

@@ -1,5 +1,4 @@
 # Rust Packet Filtering
-
 ## Setup
 ```sh
 sudo iptables -A OUTPUT -d 127.0.0.1 -p icmp -j NFQUEUE --queue-num 0

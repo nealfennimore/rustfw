@@ -1,67 +1,92 @@
 use libc;
 
-type NfqueueData = *const libc::c_void;
+pub mod nfq;
+use nfq::*;
 
-/// Opaque struct `Message`: abstracts NFLOG data representing a packet data and metadata
-pub struct Message {
-    qqh: *const libc::c_void,
-    nfad: NfqueueData,
-    id: u32,
-    l3_proto: u16,
+struct Queue<T> {
+    h: NfHandle,
+    qh: Option<NfQueueHandle>,
+    num: QueueNum,
+    data: T
 }
 
-
-type NfqueueHandle = *const libc::c_void;
-type NfqueueQueueHandle = *const libc::c_void;
-
-/// Prototype for the callback function, triggered when a packet is received
-pub type NfqueueCallback = fn(&Message) -> ();
-
-type NfqueueCCallback = extern "C" fn(
-    *const libc::c_void,
-    *const libc::c_void,
-    *const libc::c_void,
-    *const libc::c_void,
-);
-
-#[repr(C)]
-pub struct NfMsgPacketHdr {
-    /// unique ID of the packet
-    pub packet_id: u32,
-    /// hw protocol (network order)
-    pub hw_protocol: u16,
-    /// Netfilter hook
-    pub hook: u8,
+impl<T> Drop for Queue<T> {
+    fn drop(&mut self) {
+        self.close();
+    }
 }
 
-#[link(name = "netfilter_queue")]
-extern "C" {
-    // library setup
-    pub fn nfq_open() -> NfqueueHandle;
-    pub fn nfq_close(qh: NfqueueHandle);
-    pub fn nfq_bind_pf(qh: NfqueueHandle, pf: libc::c_int) -> libc::c_int;
-    pub fn nfq_unbind_pf(qh: NfqueueHandle, pf: libc::c_int) -> libc::c_int;
+impl<T> Queue<T> {
+    pub fn new(data: T, num: QueueNum) -> Self {
+        let h = unsafe { nfq_open() };
+        assert!(! h.is_null(), "Could not open handler");
 
-    // queue handling
-    pub fn nfq_fd(h: NfqueueHandle) -> libc::c_int;
-    pub fn nfq_create_queue(
-        qh: NfqueueHandle,
-        num: u16,
-        cb: NfqueueCCallback,
-        data: *mut libc::c_void,
-    ) -> NfqueueQueueHandle;
-    pub fn nfq_destroy_queue(qh: NfqueueHandle) -> libc::c_int;
-    pub fn nfq_handle_packet(qh: NfqueueHandle, buf: *mut libc::c_void, rc: libc::c_int)
-        -> libc::c_int;
-    pub fn nfq_set_mode(gh: NfqueueQueueHandle, mode: u8, range: u32) -> libc::c_int;
-    pub fn nfq_set_queuelen(gh: NfqueueQueueHandle, queuelen: u32) -> libc::c_int;
-    pub fn nfq_set_verdict2(
-        qqh: *const libc::c_void,
-        id: u32,
-        verdict: u32,
-        mark: u32,
-        data_len: u32,
-        data: *const libc::c_uchar,
-    );
-    pub fn nfq_get_msg_packet_hdr(nfad: NfqueueData) -> *const libc::c_void;
+        Self {
+            h,
+            qh: None,
+            num,
+            data
+        }
+    }
+
+    fn fd(&self) -> FileDescriptor {
+        unsafe { nfq_fd( self.h ) }
+    }
+
+    fn close(&self) {
+        unsafe { nfq_close( self.h ) };
+    }
+
+    fn bind(&self, pf: ProtocolFamily) {
+        let result = unsafe { nfq_bind_pf( self.h, pf ) };
+        assert!(result >= 0, "Failed to bind to queue handler");
+    }
+
+    fn unbind(&self, pf: ProtocolFamily) {
+        let result = unsafe { nfq_unbind_pf( self.h, pf ) };
+        assert!(result >= 0, "Failed to unbind");
+    }
+
+    fn create(&mut self, cb: NfQueueCallback) {
+        let queue_ptr = &*self as *const Queue<T> as *mut libc::c_void;
+        let qh = unsafe { nfq_create_queue( self.h, self.num, nfq_callback::<T>, queue_ptr ) };
+        assert!(! qh.is_null(), "Could not create queue");
+        self.qh = Some(qh);
+    }
+
+    fn destroy(&mut self) {
+        let qh = self.qh.expect("No queue handler to destroy");
+        unsafe { nfq_destroy_queue( qh ) };
+        self.qh = None;
+    }
+}
+
+extern "C" fn nfq_callback<T>(
+    qh: NfQueueHandle, 
+    nfmsg: NfCallbackGenMsg, 
+    nfad: NfqCallbackData, 
+    data: NfData
+) {
+    let queue_ptr: *mut Queue<T> = data as *mut Queue<T>;
+    let q = &mut unsafe {  &mut *queue_ptr };
+
+    match q.cb {
+        None => panic!(""),
+        Some(callback) => {
+            callback()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic]
+    fn it_panies_when_no_queue_handler() {
+        let q = Queue::new((), 0);
+        q.create(do_it);
+        q.destroy();
+    }
 }
