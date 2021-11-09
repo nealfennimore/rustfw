@@ -2,8 +2,8 @@ use crate::nfq::*;
 pub struct LogEntry {
     qh: NfQueueHandle,
     nfad: NfLogData,
-    id: u32,
-    l3_proto: u16,
+    pub id: u32,
+    pub l3_proto: u16,
 }
 
 impl LogEntry {

@@ -3,8 +3,8 @@ use netfilter_queue::log_entry::*;
 use netfilter_queue::nfq::*;
 
 fn handle_verdict(qh: NfQueueData, nfad: NfLogData){
-    println!("handle_verdict");
     let entry = LogEntry::new(qh, nfad);
+    println!("handle_verdict {} {}", entry.id, entry.l3_proto);
     entry.set_verdict(Verdict::Accept);
 }
 
