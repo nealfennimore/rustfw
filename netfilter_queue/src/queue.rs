@@ -75,14 +75,18 @@ impl<T> Queue<T> {
         assert!(self.qh.is_some());
         assert!(self.cb.is_some());
 
+        const SIZE: usize = u32::MAX as usize;
         let fd = self.fd();
-        let mut buf: [u8; 65536] = [0; 65536];
+        let mut buf: Vec<u8> = vec![0; SIZE];
         let buf_ptr = buf.as_mut_ptr() as *mut libc::c_void;
         let buf_len = buf.len() as libc::size_t;
 
         loop {
-            let rc = unsafe { libc::recv(fd, buf_ptr, buf_len, 0) };
-            assert!(rc >= 0, "Error while receiving: {}", rc);
+            let rc = unsafe { libc::recv(fd, buf_ptr, buf_len, libc::MSG_DONTWAIT) };
+            if rc < 0 {
+                continue;
+            }
+            // assert!(rc >= 0, "Error while receiving: {}", rc);
 
             let rv = unsafe { nfq_handle_packet(self.h, buf_ptr, rc as libc::c_int) };
             if rv < 0 {
